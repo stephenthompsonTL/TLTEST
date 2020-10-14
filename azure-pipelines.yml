@@ -1,0 +1,167 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+jobs:
+  - job: android_testing
+
+    pool:
+      vmImage: 'macos-latest'
+
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+
+    - script:
+        pip install -r requirements.txt
+      displayName: 'Install Python dependencies'
+
+    - bash:
+        brew install allure
+      displayName: 'Install allure'
+
+    - script:
+        npm install -g appium
+      displayName: 'Install Appium'
+
+    - script:
+        appium -p 4723 &
+      displayName: 'Start Appium Server Instance for Android emulator'
+
+    - bash:
+        echo "y" | $ANDROID_HOME/tools/bin/sdkmanager --install 'system-images;android-30;google_apis;x86'
+      displayName: 'Download and install AVD system image'
+
+    - bash:
+        echo "no" | $ANDROID_HOME/tools/bin/avdmanager create avd -n android_emulator -k 'system-images;android-30;google_apis;x86' -d 17 --force
+      displayName: 'Create Google Pixel emulator'
+
+    - bash: |
+        nohup $ANDROID_HOME/emulator/emulator -avd android_emulator -skin 1080x1920 -no-snapshot -no-audio -no-boot-anim -accel auto -gpu auto -qemu -lcd-density 420 > /dev/null 2>&1 &
+        $ANDROID_HOME/platform-tools/adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed | tr -d '\r') ]]; do sleep 1; done; input keyevent 82'
+        $ANDROID_HOME/platform-tools/adb devices
+        echo "Emulator started"
+      displayName: 'Start Android emulator in the background'
+
+    - task: DownloadSecureFile@1
+      name: testSettings # The name with which to reference the secure file's path on the agent, like $(mySecureFile.secureFilePath)
+      inputs:
+        secureFile: 'test_settings.json'
+      displayName: 'Download settings'
+
+    - task: CopyFiles@2
+      inputs:
+        sourceFolder: $(Agent.TempDirectory)
+        contents: 'test_settings.json'
+        targetFolder: $(Build.SourcesDirectory)/settings
+      displayName: 'Copy settings file to the correct place'
+
+    - bash:
+        behave -e ios.feature -f allure_behave.formatter:AllureFormatter -o ./allure-results ./features
+      displayName: 'Run Automation Testing Scripts and generate Allure Results'
+      continueOnError: true
+
+    - bash:
+        allure generate ./allure-results -o ./allure-reports
+      displayName: 'Generate Allure Reports'
+
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: $(Build.SourcesDirectory)/allure-reports
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId)-$(Agent.JobName)-allure-reports.zip
+      displayName: 'Archive Allure reports'
+
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: $(Build.SourcesDirectory)/allure-results
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId)-$(Agent.JobName)-allure-results.zip
+      displayName: 'Archive Allure results'
+
+    - task: CopyFiles@2
+      inputs:
+        contents: 'allure-*.zip'
+        targetFolder: $(Build.ArtifactStagingDirectory)
+      displayName: 'Copy Allure results and reports to artifact publishing directory'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: $(Build.ArtifactStagingDirectory)
+        artifactName: AllureReport
+      displayName: 'Publish Allure results and reports'
+
+  - job: ios_testing
+
+    pool:
+      vmImage: 'macos-latest'
+
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+
+    - script:
+        pip install -r requirements.txt
+      displayName: 'Install Python dependencies'
+
+    - bash:
+        brew install allure
+      displayName: 'Install allure'
+
+    - script:
+        npm install -g appium
+      displayName: 'Install Appium'
+
+    - script:
+        appium -p 4724 &
+      displayName: 'Start Appium Server Instance for iOS simulator'
+
+    - task: DownloadSecureFile@1
+      name: testSettings # The name with which to reference the secure file's path on the agent, like $(mySecureFile.secureFilePath)
+      inputs:
+        secureFile: 'test_settings.json'
+      displayName: 'Download settings'
+
+    - task: CopyFiles@2
+      inputs:
+        sourceFolder: $(Agent.TempDirectory)
+        contents: 'test_settings.json'
+        targetFolder: $(Build.SourcesDirectory)/settings
+      displayName: 'Copy settings file to the correct place'
+
+    - bash:
+        behave -e android* -f allure_behave.formatter:AllureFormatter -o ./allure-results ./features
+      displayName: 'Run Automation Testing Scripts and generate Allure Results'
+      continueOnError: true
+
+    - bash:
+        allure generate ./allure-results -o ./allure-reports
+      displayName: 'Generate Allure Reports'
+
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: $(Build.SourcesDirectory)/allure-reports
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId)-$(Agent.JobName)-allure-reports.zip
+      displayName: 'Archive Allure reports'
+
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: $(Build.SourcesDirectory)/allure-results
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId)-$(Agent.JobName)-allure-results.zip
+      displayName: 'Archive Allure results'
+
+    - task: CopyFiles@2
+      inputs:
+        contents: 'allure-*.zip'
+        targetFolder: $(Build.ArtifactStagingDirectory)
+      displayName: 'Copy Allure results and reports to artifact publishing directory'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: $(Build.ArtifactStagingDirectory)
+        artifactName: AllureReport
+      displayName: 'Publish Allure results and reports'
