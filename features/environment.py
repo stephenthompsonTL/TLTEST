@@ -14,7 +14,7 @@ from behave.model_core import Status
 
 
 def before_all(context):
-    #jira.connect_to_jira()
+    jira.connect_to_jira()
     pass
 
 def before_feature(context, feature):
@@ -65,8 +65,8 @@ def after_scenario(context, scenario):
         description = description.replace(">", "")
         description += str(datetime.datetime.now()) + "\n"
 
-        #new_issue = jira.add_issue(scenario_name, description)
-        #jira.attach_screenshots_in_jira(new_issue, capture_screenshots_for_jira(context))
+        new_issue = jira.add_issue(scenario_name, description)
+        jira.attach_screenshots_in_jira(new_issue, capture_screenshots_for_jira(context))
 
 
     logging.info("FINISHED scenario: " + scenario.name)
